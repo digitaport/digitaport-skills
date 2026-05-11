@@ -12,6 +12,9 @@ STATE_DIR="${DIGITAPORT_SKILLS_STATE_DIR:-$HOME/.agents/.digitaport-skills}"
 FORCE=0
 REPO_URL_SET=0
 REF_SET=0
+ALIAS_NAME="digitaport-skills-update"
+ALIAS_START="# >>> digitaport-skills >>>"
+ALIAS_END="# <<< digitaport-skills <<<"
 
 if [ -n "$REPO_URL" ]; then
   REPO_URL_SET=1
@@ -234,6 +237,41 @@ cleanup_stale_links() {
   done < "$installed_file"
 }
 
+write_alias_block() {
+  local rc_file alias_command tmp_file
+  rc_file="$1"
+  alias_command="alias $ALIAS_NAME=\"$INSTALL_ROOT/scripts/install.sh\""
+
+  mkdir -p "$(dirname "$rc_file")"
+  tmp_file="$(mktemp)"
+
+  if [ -f "$rc_file" ]; then
+    awk -v start="$ALIAS_START" -v end="$ALIAS_END" '
+      $0 == start { skip=1; next }
+      $0 == end { skip=0; next }
+      skip != 1 { print }
+    ' "$rc_file" > "$tmp_file"
+  fi
+
+  {
+    cat "$tmp_file"
+    if [ -s "$tmp_file" ]; then
+      printf '\n'
+    fi
+    printf '%s\n' "$ALIAS_START"
+    printf '%s\n' "$alias_command"
+    printf '%s\n' "$ALIAS_END"
+  } > "$rc_file"
+
+  rm -f "$tmp_file"
+  echo "configured alias in $rc_file"
+}
+
+install_update_alias() {
+  write_alias_block "$HOME/.zshrc"
+  write_alias_block "$HOME/.bashrc"
+}
+
 require_command git
 require_command find
 require_command readlink
@@ -283,12 +321,14 @@ EOF
 
 cleanup_stale_links
 write_state "$current_commit" "${installed[@]}"
+install_update_alias
 rm -f "$tmp_current_skills"
 
 echo
 echo "Digitaport skills are installed in: $AGENTS_DIR"
 echo "Managed clone: $INSTALL_ROOT"
 echo "Installed commit: $current_commit"
+echo "Update alias: $ALIAS_NAME"
 
 if [ "${#conflicts[@]}" -gt 0 ]; then
   echo
@@ -299,4 +339,4 @@ if [ "${#conflicts[@]}" -gt 0 ]; then
 fi
 
 echo
-echo "To update later, run: $INSTALL_ROOT/scripts/install.sh"
+echo "To update later, run: $ALIAS_NAME"
