@@ -79,7 +79,7 @@ What it does:
 - Clones this repository into a managed local cache at `~/.digitaport/skills/digitaport-skills`
 - Links each skill folder into `~/.agents/skills`
 - Tracks which links belong to Digitaport so stale links can be cleaned up on later updates
-- Creates a shell alias named `digitaport-skills-update` in `~/.zshrc` and `~/.bashrc`
+- Installs a real update command named `digitaport-skills-update` in `~/.local/bin`
 - Reuses the same script for install and update
 
 ### Recommended Team Command
@@ -117,7 +117,7 @@ The installer is also the updater. After the first install, engineers can update
 digitaport-skills-update
 ```
 
-If the current shell session was already open during installation, run `source ~/.zshrc` or open a new terminal before using the alias.
+If `~/.local/bin` is not already on an engineer's `PATH`, they should add it in their shell config before using the command directly.
 
 Recommended rollout process:
 

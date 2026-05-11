@@ -9,10 +9,11 @@ REF="${DIGITAPORT_SKILLS_REF:-}"
 INSTALL_ROOT="${DIGITAPORT_SKILLS_INSTALL_ROOT:-$HOME/.digitaport/skills/digitaport-skills}"
 AGENTS_DIR="${DIGITAPORT_AGENTS_SKILLS_DIR:-$HOME/.agents/skills}"
 STATE_DIR="${DIGITAPORT_SKILLS_STATE_DIR:-$HOME/.agents/.digitaport-skills}"
+BIN_DIR="${DIGITAPORT_SKILLS_BIN_DIR:-$HOME/.local/bin}"
 FORCE=0
 REPO_URL_SET=0
 REF_SET=0
-ALIAS_NAME="digitaport-skills-update"
+UPDATE_COMMAND_NAME="digitaport-skills-update"
 ALIAS_START="# >>> digitaport-skills >>>"
 ALIAS_END="# <<< digitaport-skills <<<"
 
@@ -36,6 +37,7 @@ Options:
   --ref REF            Branch, tag, or commit to install. Defaults to: $DEFAULT_REF
   --install-root PATH  Managed clone location.
   --agents-dir PATH    Target skills directory. Defaults to: ~/.agents/skills
+  --bin-dir PATH       Directory for the update command. Defaults to: ~/.local/bin
   --force              Replace conflicting existing symlinks or directories.
   --help               Show this help.
 
@@ -45,6 +47,7 @@ Environment overrides:
   DIGITAPORT_SKILLS_INSTALL_ROOT
   DIGITAPORT_AGENTS_SKILLS_DIR
   DIGITAPORT_SKILLS_STATE_DIR
+  DIGITAPORT_SKILLS_BIN_DIR
 
 Examples:
   ./scripts/install.sh
@@ -71,6 +74,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --agents-dir)
       AGENTS_DIR="$2"
+      shift 2
+      ;;
+    --bin-dir)
+      BIN_DIR="$2"
       shift 2
       ;;
     --force)
@@ -237,10 +244,10 @@ cleanup_stale_links() {
   done < "$installed_file"
 }
 
-write_alias_block() {
-  local rc_file alias_command tmp_file
+rewrite_managed_block() {
+  local rc_file block_line tmp_file
   rc_file="$1"
-  alias_command="alias $ALIAS_NAME=\"$INSTALL_ROOT/scripts/install.sh\""
+  block_line="$2"
 
   mkdir -p "$(dirname "$rc_file")"
   tmp_file="$(mktemp)"
@@ -254,22 +261,64 @@ write_alias_block() {
   fi
 
   {
-    cat "$tmp_file"
     if [ -s "$tmp_file" ]; then
+      cat "$tmp_file"
       printf '\n'
     fi
     printf '%s\n' "$ALIAS_START"
-    printf '%s\n' "$alias_command"
+    if [ -n "$block_line" ]; then
+      printf '%s\n' "$block_line"
+    fi
     printf '%s\n' "$ALIAS_END"
   } > "$rc_file"
 
   rm -f "$tmp_file"
-  echo "configured alias in $rc_file"
 }
 
-install_update_alias() {
-  write_alias_block "$HOME/.zshrc"
-  write_alias_block "$HOME/.bashrc"
+remove_alias_block() {
+  local rc_file tmp_file
+  rc_file="$1"
+
+  if [ ! -f "$rc_file" ]; then
+    return 0
+  fi
+
+  tmp_file="$(mktemp)"
+  awk -v start="$ALIAS_START" -v end="$ALIAS_END" '
+    $0 == start { skip=1; next }
+    $0 == end { skip=0; next }
+    skip != 1 { print }
+  ' "$rc_file" > "$tmp_file"
+  mv "$tmp_file" "$rc_file"
+}
+
+install_update_command() {
+  local command_path
+  command_path="$BIN_DIR/$UPDATE_COMMAND_NAME"
+
+  mkdir -p "$BIN_DIR"
+  cat > "$command_path" <<EOF
+#!/usr/bin/env bash
+exec "$INSTALL_ROOT/scripts/install.sh" "\$@"
+EOF
+  chmod +x "$command_path"
+  echo "installed update command: $command_path"
+}
+
+cleanup_legacy_aliases() {
+  remove_alias_block "$HOME/.zshrc"
+  remove_alias_block "$HOME/.bashrc"
+}
+
+warn_if_bin_dir_not_on_path() {
+  case ":$PATH:" in
+    *":$BIN_DIR:"*)
+      ;;
+    *)
+      echo "warning: $BIN_DIR is not on PATH." >&2
+      echo "Add it to your shell config to use $UPDATE_COMMAND_NAME directly." >&2
+      ;;
+  esac
 }
 
 require_command git
@@ -321,14 +370,16 @@ EOF
 
 cleanup_stale_links
 write_state "$current_commit" "${installed[@]}"
-install_update_alias
+install_update_command
+cleanup_legacy_aliases
+warn_if_bin_dir_not_on_path
 rm -f "$tmp_current_skills"
 
 echo
 echo "Digitaport skills are installed in: $AGENTS_DIR"
 echo "Managed clone: $INSTALL_ROOT"
 echo "Installed commit: $current_commit"
-echo "Update alias: $ALIAS_NAME"
+echo "Update command: $UPDATE_COMMAND_NAME"
 
 if [ "${#conflicts[@]}" -gt 0 ]; then
   echo
@@ -339,4 +390,4 @@ if [ "${#conflicts[@]}" -gt 0 ]; then
 fi
 
 echo
-echo "To update later, run: $ALIAS_NAME"
+echo "To update later, run: $UPDATE_COMMAND_NAME"
