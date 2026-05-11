@@ -69,3 +69,67 @@ When adding or updating skills:
 2. Add supporting references instead of overloading the main skill prompt.
 3. Prefer explicit output contracts and step-by-step workflows.
 4. Update this README when the skill catalog or repository layout changes.
+
+## Team Installation
+
+The repository now includes an idempotent installer at `scripts/install.sh`.
+
+What it does:
+
+- Clones this repository into a managed local cache at `~/.digitaport/skills/digitaport-skills`
+- Links each skill folder into `~/.agents/skills`
+- Tracks which links belong to Digitaport so stale links can be cleaned up on later updates
+- Reuses the same script for install and update
+
+### Recommended Team Command
+
+If the repository is public or otherwise accessible through GitHub raw content:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/digitaport/digitaport-skills/main/scripts/install.sh)
+```
+
+If the repository is private, use GitHub CLI so engineers can authenticate with their existing GitHub session:
+
+```bash
+DIGITAPORT_SKILLS_REPO_URL=git@github.com:digitaport/digitaport-skills.git \
+bash <(gh api repos/digitaport/digitaport-skills/contents/scripts/install.sh --jq '.content' | base64 --decode)
+```
+
+### Installer Options
+
+```bash
+./scripts/install.sh --help
+./scripts/install.sh --ref v1.0.0
+./scripts/install.sh --repo-url git@github.com:digitaport/digitaport-skills.git
+./scripts/install.sh --force
+```
+
+Use `--ref` to pin engineers to a release tag. Omit it to track the latest commit on `main`.
+The installer persists the chosen source URL and ref in `~/.agents/.digitaport-skills/metadata.env`, so later updates reuse the same channel unless an engineer overrides it.
+
+## Update Strategy
+
+The installer is also the updater. After the first install, engineers can update in place with:
+
+```bash
+~/.digitaport/skills/digitaport-skills/scripts/install.sh
+```
+
+Recommended rollout process:
+
+1. Treat `main` as the integration branch for skill authors.
+2. Cut Git tags such as `v1.0.0`, `v1.1.0`, and `v1.2.0` for team-approved releases.
+3. Tell engineers to install with `--ref <tag>` if you want controlled rollout, or with the default branch if you want them always on the latest version.
+4. Announce updates in Slack or your engineering changelog with the exact update command.
+
+Suggested release policy:
+
+- Patch release for copy edits, reference fixes, and non-breaking clarifications
+- Minor release for new skills or workflow changes
+- Major release only if you rename or remove skills, or materially change expected behavior
+
+This gives you two supported modes:
+
+- `latest`: engineers re-run the installer and pick up the newest approved `main`
+- `pinned`: engineers stay on a tag until you ask them to move
